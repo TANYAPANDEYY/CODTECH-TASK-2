@@ -1,0 +1,52 @@
+import speech_recognition as sr
+from moviepy.editor import AudioFileClip
+from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+import torch
+
+def extract_audio(video_path, audio_path="audio.wav"):
+    """
+    Extracts audio from a video file and saves it as a WAV file.
+    """
+    audio_clip = AudioFileClip(video_path)
+    audio_clip.write_audiofile(audio_path)
+    return audio_path
+
+def transcribe_audio(audio_path):
+    """
+    Transcribes speech from an audio file using SpeechRecognition or wav2vec 2.0.
+    """
+    recognizer = sr.Recognizer()
+
+    with sr.AudioFile(audio_path) as source:
+        audio_data = recognizer.record(source)
+
+    try:
+        # Using SpeechRecognition Google API (for small files)
+        text = recognizer.recognize_google(audio_data)
+        return text
+
+    except sr.UnknownValueError:
+        print("Google API could not understand audio, trying Wav2Vec 2.0...")
+
+        # Using Wav2Vec 2.0 for better accuracy
+        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+        model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+
+        waveform, _ = torchaudio.load(audio_path)
+        input_values = processor(waveform.squeeze().numpy(), return_tensors="pt", sampling_rate=16000).input_values
+        logits = model(input_values).logits
+        predicted_ids = torch.argmax(logits, dim=-1)
+
+        transcription = processor.batch_decode(predicted_ids)[0]
+        return transcription
+
+if _name_ == "_main_":
+    video_file = "sample_video.mp4"  # Replace with your video file
+    audio_file = extract_audio(video_file)
+    transcript = transcribe_audio(audio_file)
+
+    print("\nTranscription:\n", transcript)
+
+    # Save output to file
+    with open("output.txt", "w") as f:
+        f.write(transcript)
